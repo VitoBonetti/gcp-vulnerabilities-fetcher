@@ -582,11 +582,13 @@ def main():
     start_time = time.time()
 
     data = request.get_json()
-    if not data or 'year' not in data:
-        error_msg = "Bad Request: JSON body must contain a 'year' key."
+    if not data or 'year' not in data or 'callback' not in data:
+        error_msg = "Bad Request: JSON body must contain a 'year' and 'callback' key."
         logger.error(error_msg)
-        return (error_msg, 400)
+        return error_msg, 400
+
     year = int(data['year'])
+    callback = data['callback']
 
     table_id, table_existed = ensure_table_exists()
 
@@ -661,7 +663,14 @@ def main():
             insert_update_history()
             end_time = time.time()
             duration = end_time - start_time
-            return f"No updates or new items for year {year}. Duration: {duration:.2f}s", 200
+            returning_message = f"No updates or new items for year {year}. Duration: {duration:.2f}s"
+            try:
+                response = requests.post(callback, headers={"Content-Type": "application/json"},
+                                         json={"returning_message": returning_message})
+                response.raise_for_status()
+            except Exception as e:
+                logger.error(f"Failed to callback")
+            return returning_message, 200
 
         df = pd.DataFrame(processed_items)
 
@@ -726,7 +735,13 @@ def main():
             insert_update_history()
             end_time = time.time()
             duration = end_time - start_time
-            return f"Successfully processed incremental data for year {year}. Duration: {duration:.2f}s", 200
+            returning_message = f"Successfully processed incremental data for year {year}. Duration: {duration:.2f}s"
+            try:
+                response = requests.post(callback, headers={"Content-Type": "application/json"}, json={"returning_message": returning_message})
+                response.raise_for_status()
+            except Exception as e:
+                logger.error(f"Failed to callback")
+            return returning_message, 200
         except Exception as e:
             logger.error(f"Failed to execute MERGE: {e}")
             return f"Failed to merge data for year {year}. Error: {e}", 500
