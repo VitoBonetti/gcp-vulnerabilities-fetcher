@@ -629,7 +629,7 @@ def main():
 
         for col in timestamp_cols:
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
+                df[col] = pd.to_datetime(df[col], errors='coerce', utc=True)
 
         table_name = f"{BIGQUERY_DATASET}.{TABLE_NAME}"
         try:
