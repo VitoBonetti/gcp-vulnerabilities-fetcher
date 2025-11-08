@@ -14,6 +14,8 @@ from google.cloud import secretmanager, bigquery
 from google.cloud.bigquery import SchemaField, TimePartitioningType, Table, TimePartitioning
 from google.cloud.exceptions import NotFound
 from flask import Flask, request
+import threading
+
 
 # --- Create a Flask App ---
 app = Flask(__name__)
@@ -579,8 +581,6 @@ def process_vulnerabilities(year: int, existing: dict = None):
 
 @app.route("/", methods=["POST"])
 def main():
-    start_time = time.time()
-
     data = request.get_json()
     if not data or 'year' not in data or 'callback' not in data:
         error_msg = "Bad Request: JSON body must contain a 'year' and 'callback' key."
@@ -590,6 +590,18 @@ def main():
     year = int(data['year'])
     callback = data['callback']
 
+    # Start background thread
+    threading.Thread(target=run_job, args=(year, callback), daemon=True).start()
+
+    # Immediate response to n8n so HTTP node does not timeout
+    return {
+        "status": "accepted",
+        "message": f"Job started for year {year}"
+    }, 202
+
+
+def run_job(year: int, callback: str):
+    start_time = time.time()
     table_id, table_existed = ensure_table_exists()
 
     float_cols = [
