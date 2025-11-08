@@ -111,7 +111,7 @@ def get_secret(secret_name):
         response = secret_client.access_secret_version(request={"name": name})
         return response.payload.data.decode("UTF-8")
     except Exception as e:
-        logger.error(f"Failed to retrieve Gemini API key from Secret Manager: {e}")
+        logger.error(f"Failed to retrieve {secret_name} API key from Secret Manager: {e}")
         return None
 
 
