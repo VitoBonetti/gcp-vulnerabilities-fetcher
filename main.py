@@ -26,8 +26,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- GCP CONFIG ---
-PROJECT_ID = "vuln-fetcher"
-BIGQUERY_DATASET = "main-table"
+PROJECT_ID = "vulnerabilities-fetcher"
+BIGQUERY_DATASET = "main_table"
 TABLE_NAME = "vulnerabilities"
 STAGING_TABLE_NAME = "vulnerabilities-staging"
 UPDATE_HISTORY_TABLE_NAME = "last_update"
