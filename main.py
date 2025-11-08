@@ -508,9 +508,11 @@ def process_vulnerabilities(year: int, existing: dict = None):
             item["contact_name"] = item.get("assignee", {}).get("name") if item.get("assignee") else None
             item["contact_email"] = item.get("assignee", {}).get("email") if item.get("assignee") else None
 
-            item["vuln_type"] = item.get("vulnerability_type", {}).get("name") if item.get("vulnerability_type") else None
-            advsim_type = advsim_map_category(item.get("id") if item.get("id") else None)
-            item["vuln_type"] = advsim_type
+            vuln_type = item.get("vulnerability_type", {}).get("name") if item.get("vulnerability_type") else None
+            if ADVSIM_MAP_CATEGORY.get(vuln_type):
+                item["vuln_type"] = advsim_map_category(vuln_type)
+            else:
+                item["vuln_type"] = vuln_type
 
             item["test_id"] = item.get("test", {}).get("id") if item.get("test") else None
             item["test_state"] = item.get("test", {}).get("state") if item.get("test") else None
