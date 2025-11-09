@@ -664,12 +664,6 @@ def main():
             end_time = time.time()
             duration = end_time - start_time
             returning_message = f"No updates or new items for year {year}. Duration: {duration:.2f}s"
-            try:
-                response = requests.post(callback, headers={"Content-Type": "application/json"},
-                                         json={"returning_message": returning_message})
-                response.raise_for_status()
-            except Exception as e:
-                logger.error(f"Failed to callback")
             return returning_message, 200
 
         df = pd.DataFrame(processed_items)
@@ -736,11 +730,6 @@ def main():
             end_time = time.time()
             duration = end_time - start_time
             returning_message = f"Successfully processed incremental data for year {year}. Duration: {duration:.2f}s"
-            try:
-                response = requests.post(callback, headers={"Content-Type": "application/json"}, json={"returning_message": returning_message})
-                response.raise_for_status()
-            except Exception as e:
-                logger.error(f"Failed to callback")
             return returning_message, 200
         except Exception as e:
             logger.error(f"Failed to execute MERGE: {e}")
