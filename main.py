@@ -837,7 +837,7 @@ def start_job():
         data_bytes = json.dumps(data).encode("utf-8")
 
         future = publisher_client.publish(topic_path, data_bytes)
-        message_id = future.get()  # Waits for publish to complete
+        message_id = future.result()  # Waits for publish to complete
 
         logger.info(f"Published message {message_id} for year {year} to {PUBSUB_TOPIC}.")
 
