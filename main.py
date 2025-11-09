@@ -14,7 +14,6 @@ from google.cloud import secretmanager, bigquery
 from google.cloud.bigquery import SchemaField, TimePartitioningType, Table, TimePartitioning
 from google.cloud.exceptions import NotFound
 from flask import Flask, request
-import threading
 
 
 # --- Create a Flask App ---
@@ -590,17 +589,6 @@ def main():
     year = int(data['year'])
     callback = data['callback']
 
-    # Start background thread
-    threading.Thread(target=run_job, args=(year, callback), daemon=True).start()
-
-    # Immediate response to n8n so HTTP node does not timeout
-    return {
-        "status": "accepted",
-        "message": f"Job started for year {year}"
-    }, 202
-
-
-def run_job(year: int, callback: str):
     start_time = time.time()
     table_id, table_existed = ensure_table_exists()
 
@@ -704,7 +692,7 @@ def run_job(year: int, callback: str):
 
         for col in timestamp_cols:
             if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce', utc=True)
+                df[col] = pd.to_datetime(df[col], errors='coerce')
 
         staging_table_name = f"{BIGQUERY_DATASET}.{STAGING_TABLE_NAME}"
         try:
