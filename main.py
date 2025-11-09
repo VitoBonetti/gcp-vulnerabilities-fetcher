@@ -688,6 +688,17 @@ def run_job_logic(year: int, chat_id: str = None):
             end_time = time.time()
             duration = end_time - start_time
             returning_message = f"No updates or new items for year {year}. Duration: {duration:.2f}s"
+            try:
+                webhook_url = get_secret(N8N_WEBHOOK_URL)
+                payload = {
+                    "status": "success",
+                    "message": returning_message,
+                    "chatId": chat_id
+                }
+                if webhook_url:
+                    requests.post(webhook_url, json=payload)
+            except Exception as e:
+                logger.error(f"Failed to call 'job finished' webhook: {e}")
             return returning_message, 200
 
         df = pd.DataFrame(processed_items)
