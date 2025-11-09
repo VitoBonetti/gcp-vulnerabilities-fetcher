@@ -648,7 +648,8 @@ def run_job_logic(year: int, chat_id: str = None):
                         "message": returning_message,
                         "chatId": chat_id
                     }
-                    requests.post(webhook_url, json=payload)
+                    response = requests.post(webhook_url, json=payload, timeout=10)
+                    response.raise_for_status()
             except Exception as e:
                 logger.error(f"Failed to call 'job finished' webhook: {e}")
 
@@ -667,7 +668,8 @@ def run_job_logic(year: int, chat_id: str = None):
                     "chatId": chat_id
                 }
                 if webhook_url:
-                    requests.post(webhook_url, json=payload)
+                    response = requests.post(webhook_url, json=payload, timeout=10)
+                    response.raise_for_status()
             except Exception as e:
                 logger.error(f"Failed to call 'job finished' webhook: {e}")
             return returning_message, 500
@@ -696,7 +698,8 @@ def run_job_logic(year: int, chat_id: str = None):
                     "chatId": chat_id
                 }
                 if webhook_url:
-                    requests.post(webhook_url, json=payload)
+                    response = requests.post(webhook_url, json=payload, timeout=10)
+                    response.raise_for_status()
             except Exception as e:
                 logger.error(f"Failed to call 'job finished' webhook: {e}")
             return returning_message, 200
@@ -773,7 +776,8 @@ def run_job_logic(year: int, chat_id: str = None):
                     "chatId": chat_id
                 }
                 if webhook_url:
-                    requests.post(webhook_url, json=payload)
+                    response = requests.post(webhook_url, json=payload, timeout=10)
+                    response.raise_for_status()
             except Exception as e:
                 logger.error(f"Failed to call 'job finished' webhook: {e}")
 
@@ -790,7 +794,8 @@ def run_job_logic(year: int, chat_id: str = None):
                     "chatId": chat_id
                 }
                 if webhook_url:
-                    requests.post(webhook_url, json=payload)
+                    response = requests.post(webhook_url, json=payload, timeout=10)
+                    response.raise_for_status()
             except Exception as e:
                 logger.error(f"Failed to call 'job finished' webhook: {e}")
             return returning_message, 500
