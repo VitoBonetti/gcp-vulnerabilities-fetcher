@@ -5,12 +5,14 @@ import pandas as pd
 from pandas_gbq import to_gbq
 import time
 import re
+import json
+import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import warnings
 import logging
 from urllib3.util.retry import Retry
-from google.cloud import secretmanager, bigquery
+from google.cloud import secretmanager, bigquery, pubsub_v1
 from google.cloud.bigquery import SchemaField, TimePartitioningType, Table, TimePartitioning
 from google.cloud.exceptions import NotFound
 from flask import Flask, request
@@ -33,18 +35,24 @@ TABLE_NAME = "vulnerabilities"
 STAGING_TABLE_NAME = "vulnerabilities-staging"
 UPDATE_HISTORY_TABLE_NAME = "last_update"
 DASHBOARD_SECRET_NAME = "keep-secure"
+N8N_WEBHOOK_URL = "webhook-n8n-url"
 SAFE_MAX_WORKERS = 4
+PUBSUB_PROJECT = PROJECT_ID
+PUBSUB_TOPIC = "vulnerability-job-start"
 
 # --- INIT GCP CLIENTS ---
 secret_client = secretmanager.SecretManagerServiceClient()
 bq_client = bigquery.Client()
+publisher_client = pubsub_v1.PublisherClient()
+topic_path = publisher_client.topic_path(PUBSUB_PROJECT, PUBSUB_TOPIC)
 
 # --- GOST TEAM EMAILS ---
 GOST_LIST = [
     "andre.marques@randstad.com", "emin.tosun@randstad.com", "emin.tosun@randstadgroep.nl",
     "francisco.santos@randstad.com", "iuri.picolini.moro@randstad.com", "rodrigo.magalhaes@randstad.com",
     "timothy.tjen.a.looi@randstad.com", "timothy.tjen.a.looi@randstad.nl", "vito.bonetti@randstadgroep.nl",
-    "bruno.monteiro@randstad.com", "leandro.jales@randstad.com", "hugo.pinto@randstad.com"
+    "bruno.monteiro@randstad.com", "leandro.jales@randstad.com", "hugo.pinto@randstad.com", "ciska.boera@randstadgroep.nl",
+    "ciska.boera@randstad.com", "wesley.groenestein@randstadgroep.nl", "wesley.groenestein@randstad.com"
 ]
 
 
@@ -578,16 +586,7 @@ def process_vulnerabilities(year: int, existing: dict = None):
     return processed_items
 
 
-@app.route("/", methods=["POST"])
-def main():
-    data = request.get_json()
-    if not data or 'year' not in data:
-        error_msg = "Bad Request: JSON body must contain a 'year' key."
-        logger.error(error_msg)
-        return error_msg, 400
-
-    year = int(data['year'])
-
+def run_job_logic(year: int, chat_id: str = None):
     start_time = time.time()
     table_id, table_existed = ensure_table_exists()
 
@@ -639,13 +638,39 @@ def main():
             insert_update_history()
             end_time = time.time()
             duration = end_time - start_time
-            return f"Successfully processed and loaded data for year {year}. Duration: {duration:.2f}s", 200
+            returning_message = f"[+] Successfully processed and loaded data for year {year}. Duration: {duration:.2f}s"
+            logger.info(returning_message)
+            try:
+                webhook_url = get_secret(N8N_WEBHOOK_URL)
+                if webhook_url:
+                    payload = {
+                        "status": "success",
+                        "message": returning_message,
+                        "chatId": chat_id
+                    }
+                    requests.post(webhook_url, json=payload)
+            except Exception as e:
+                logger.error(f"Failed to call 'job finished' webhook: {e}")
+
+            return returning_message, 200
         except Exception as e:
             logger.error(f"Table {table_name} could not be created. {e}")
             end_time = time.time()
             duration = end_time - start_time
-            logger.info(f"[+] Finished in {duration:.2f}s")
-            return f"Failed to process data for year {year}. Error: {e}", 500
+            returning_message = f"[-] Failed to process data for year {year}. Error: {e}"
+            logger.error(f"{returning_message} {duration:.2f}s")
+            try:
+                webhook_url = get_secret(N8N_WEBHOOK_URL)
+                payload = {
+                    "status": "error",
+                    "message": returning_message,
+                    "chatId": chat_id
+                }
+                if webhook_url:
+                    requests.post(webhook_url, json=payload)
+            except Exception as e:
+                logger.error(f"Failed to call 'job finished' webhook: {e}")
+            return returning_message, 500
     else:
         # Incremental load
         query = f"SELECT uuid, state FROM `{table_id}`"
@@ -724,13 +749,102 @@ def main():
         try:
             job = bq_client.query(merge_query)
             job.result()
-            logger.info(f"MERGE completed successfully.")
             insert_update_history()
             end_time = time.time()
             duration = end_time - start_time
             returning_message = f"Successfully processed incremental data for year {year}. Duration: {duration:.2f}s"
+            logger.info(returning_message)
+            try:
+                webhook_url = get_secret(N8N_WEBHOOK_URL)
+                payload = {
+                    "status": "success",
+                    "message": returning_message,
+                    "chatId": chat_id
+                }
+                if webhook_url:
+                    requests.post(webhook_url, json=payload)
+            except Exception as e:
+                logger.error(f"Failed to call 'job finished' webhook: {e}")
+
+
             return returning_message, 200
         except Exception as e:
-            logger.error(f"Failed to execute MERGE: {e}")
-            return f"Failed to merge data for year {year}. Error: {e}", 500
+            returning_message = f"Failed to merge data for year {year}. Error: {e}"
+            logger.info(returning_message)
+            try:
+                webhook_url = get_secret(N8N_WEBHOOK_URL)
+                payload = {
+                    "status": "error",
+                    "message": returning_message,
+                    "chatId": chat_id
+                }
+                if webhook_url:
+                    requests.post(webhook_url, json=payload)
+            except Exception as e:
+                logger.error(f"Failed to call 'job finished' webhook: {e}")
+            return returning_message, 500
+
+
+@app.route("/run-job", methods=["POST"])
+def run_job():
+    # Pub/Sub sends a specific JSON envelope
+    try:
+        envelope = request.get_json()
+        if not envelope or "message" not in envelope:
+            logger.error(f"Bad Pub/Sub request: {envelope}")
+            return "Bad Request: Invalid Pub/Sub message format", 400
+
+        # Decode the actual data, which is base64 encoded
+        pubsub_message = envelope["message"]
+        data_str = base64.b64decode(pubsub_message["data"]).decode("utf-8")
+        data = json.loads(data_str)
+
+    except Exception as e:
+        logger.error(f"Failed to decode Pub/Sub message: {e}")
+        # Return 500 so Pub/Sub retries the message
+        return f"Failed to decode message: {e}", 500
+
+    if not data or 'year' not in data:
+        error_msg = "Bad Request: Pub/Sub data must contain a 'year' key."
+        logger.error(error_msg)
+        # Return 200 OK to Pub/Sub to *acknowledge* the bad message
+        # so it doesn't retry a message that will *never* work.
+        return error_msg, 200
+
+    year = int(data['year'])
+    chat_id = data.get('chatId')
+    logger.info(f"Starting job for year {year} from Pub/Sub. Notifying chatId: {chat_id}.")
+
+    # Call the actual logic
+    message, code = run_job_logic(year, chat_id)
+
+    # Return 200 or 500 to Pub/Sub to acknowledge/retry
+    return message, code
+
+@app.route("/", methods=["POST"])
+def start_job():
+    data = request.get_json()
+    if not data or 'year' not in data:
+        error_msg = "Bad Request: JSON body must contain a 'year' key."
+        logger.error(error_msg)
+        return error_msg, 400
+
+    year = int(data['year'])
+
+    try:
+        # --- Publish the message to Pub/Sub ---
+        # Data must be bytes
+        data_bytes = json.dumps(data).encode("utf-8")
+
+        future = publisher_client.publish(topic_path, data_bytes)
+        message_id = future.get()  # Waits for publish to complete
+
+        logger.info(f"Published message {message_id} for year {year} to {PUBSUB_TOPIC}.")
+
+        # --- Immediately return 202 to n8n ---
+        return f"Job for year {year} successfully queued.", 202
+
+    except Exception as e:
+        logger.error(f"Failed to publish to Pub/Sub for year {year}: {e}")
+        return f"Failed to queue job: {e}", 500
 
