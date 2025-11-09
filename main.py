@@ -614,7 +614,7 @@ def run_job_logic(year: int, chat_id: str = None):
 
         for col in float_cols:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
 
         for col in int_cols:
             if col in df.columns:
@@ -709,7 +709,7 @@ def run_job_logic(year: int, chat_id: str = None):
         # Fix types only for columns that may be present (since updates have fewer columns)
         for col in float_cols:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype('float64')
 
         for col in int_cols:
             if col in df.columns:
