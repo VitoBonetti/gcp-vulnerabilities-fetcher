@@ -581,13 +581,12 @@ def process_vulnerabilities(year: int, existing: dict = None):
 @app.route("/", methods=["POST"])
 def main():
     data = request.get_json()
-    if not data or 'year' not in data or 'callback' not in data:
-        error_msg = "Bad Request: JSON body must contain a 'year' and 'callback' key."
+    if not data or 'year' not in data:
+        error_msg = "Bad Request: JSON body must contain a 'year' key."
         logger.error(error_msg)
         return error_msg, 400
 
     year = int(data['year'])
-    callback = data['callback']
 
     start_time = time.time()
     table_id, table_existed = ensure_table_exists()
